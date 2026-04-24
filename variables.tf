@@ -41,6 +41,78 @@ variable "certificate_arn" {
 variable "database_url" {
   type      = string
   sensitive = true
+  default   = ""
+}
+
+variable "create_database" {
+  type    = bool
+  default = false
+}
+
+variable "database_subnet_ids" {
+  type    = list(string)
+  default = []
+}
+
+variable "database_name" {
+  type    = string
+  default = "genguardx"
+}
+
+variable "database_port" {
+  type    = number
+  default = 5432
+}
+
+variable "database_engine_version" {
+  type    = string
+  default = "15.4"
+}
+
+variable "database_master_username" {
+  type    = string
+  default = "genguardx"
+}
+
+variable "database_master_password" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "database_serverless_min_capacity" {
+  type    = number
+  default = 0.5
+}
+
+variable "database_serverless_max_capacity" {
+  type    = number
+  default = 4
+}
+
+variable "database_backup_retention_period" {
+  type    = number
+  default = 7
+}
+
+variable "database_publicly_accessible" {
+  type    = bool
+  default = false
+}
+
+variable "database_apply_immediately" {
+  type    = bool
+  default = false
+}
+
+variable "database_deletion_protection" {
+  type    = bool
+  default = false
+}
+
+variable "database_skip_final_snapshot" {
+  type    = bool
+  default = true
 }
 
 variable "license_key" {

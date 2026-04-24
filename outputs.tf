@@ -21,3 +21,16 @@ output "jupyter_url" {
 output "efs_file_system_id" {
   value = aws_efs_file_system.this.id
 }
+
+output "database_endpoint" {
+  value = var.create_database ? aws_rds_cluster.this[0].endpoint : null
+}
+
+output "database_port" {
+  value = var.create_database ? aws_rds_cluster.this[0].port : null
+}
+
+output "database_url" {
+  value     = local.database_url
+  sensitive = true
+}

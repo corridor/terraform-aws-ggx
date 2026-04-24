@@ -8,10 +8,20 @@ locals {
     var.tags
   )
 
+  database_subnet_ids = length(var.database_subnet_ids) > 0 ? var.database_subnet_ids : var.public_subnet_ids
+  database_url = var.create_database ? format(
+    "postgresql://%s:%s@%s:%d/%s",
+    urlencode(var.database_master_username),
+    urlencode(var.database_master_password),
+    aws_rds_cluster.this[0].endpoint,
+    var.database_port,
+    var.database_name
+  ) : var.database_url
+
   common_environment = [
     {
       name  = "CORRIDOR_SQLALCHEMY_DATABASE_URI"
-      value = var.database_url
+      value = local.database_url
     },
     {
       name  = "CORRIDOR_LICENSE_KEY"
@@ -588,6 +598,13 @@ resource "aws_ecs_task_definition" "this" {
   }
 
   depends_on = [aws_efs_mount_target.this]
+
+  lifecycle {
+    precondition {
+      condition     = var.create_database || trimspace(var.database_url) != ""
+      error_message = "database_url must be set when create_database is false."
+    }
+  }
 
   tags = local.tags
 }

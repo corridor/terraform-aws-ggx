@@ -5,5 +5,11 @@ certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/replace-me"
 database_url = "postgresql://user:password@db.example.internal:5432/genguardx"
 license_key  = "replace-me"
 
+# Set create_database = true to provision an Aurora PostgreSQL Serverless v2 cluster
+# and let the module build the database URL automatically.
+# create_database          = true
+# database_subnet_ids      = ["subnet-private-a", "subnet-private-b"]
+# database_master_password = "replace-me"
+
 smtp_username = "admin@genguardx.ai"
 smtp_password = "replace-me"
