@@ -4,10 +4,8 @@ Terraform for running GenGuardX on AWS with ECS Fargate.
 
 - one ECS service on an existing cluster
 - a single Fargate task definition with:
-  - `corridor-migration`
-  - `redis`
-  - `corridor-app`
-  - `corridor-worker`
+  - `corridor-app` (unified API and UI)
+  - `corridor-worker` (Jupyter kernel worker on port `5001`)
   - `corridor-jupyter`
 - public ALB routing `/` to the app container on port `5002`
 - ALB path routing `/jupyter` to the Jupyter container on port `5003`
@@ -48,3 +46,15 @@ terraform init
 terraform plan
 terraform apply
 ```
+
+## Kernel worker and upgrades
+
+The API serves both the UI and `/api` on port `5002`. Redis and Celery are no longer used. The API connects to the kernel worker at its default `http://127.0.0.1:5001`. The worker uses `CORRIDOR_API_URL=http://localhost:5002/` (without `/api`) for API callbacks. Containers in the same Fargate task share localhost, so neither connection needs an ALB route or a public worker port.
+
+The API and worker share `/opt/corridor/kernels` through a root-owned, owner-only EFS access point. The worker is essential and has a TCP health check; the API waits for it to become healthy.
+
+Keep `desired_count = 1` (`0` stops the service). Kernel leases assume one worker, so deployments stop the previous task before starting its replacement. Expect downtime and interruption of running jobs during updates.
+
+Database upgrades are performed through the application UI after deployment, matching the Azure deployment. There is no automatic migration container.
+
+The example uses the `latest` image tag. Supply an image your task execution role can pull; deployments outside the image owner's AWS account also need permission from that ECR repository.

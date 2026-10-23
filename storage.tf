@@ -138,3 +138,25 @@ resource "aws_efs_access_point" "notebooks" {
 
   tags = merge(local.tags, { Purpose = "notebooks" })
 }
+
+resource "aws_efs_access_point" "kernels" {
+  file_system_id = aws_efs_file_system.this.id
+
+  # The API and worker run as root and require owner-only kernel directories.
+  posix_user {
+    gid = 0
+    uid = 0
+  }
+
+  root_directory {
+    path = "/opt/corridor/kernels"
+
+    creation_info {
+      owner_gid   = 0
+      owner_uid   = 0
+      permissions = "0700"
+    }
+  }
+
+  tags = merge(local.tags, { Purpose = "kernels" })
+}

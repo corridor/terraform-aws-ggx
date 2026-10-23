@@ -28,14 +28,6 @@ locals {
       value = var.license_key
     },
     {
-      name  = "CORRIDOR_CELERY_BROKER_URL"
-      value = "redis://localhost:6379/2"
-    },
-    {
-      name  = "CORRIDOR_CELERY_RESULT_BACKEND"
-      value = "redis://localhost:6379/2"
-    },
-    {
       name  = "CORRIDOR_OUTPUT_DATA_LOCATION"
       value = "/opt/corridor/data/results/{}.parquet"
     },
@@ -77,16 +69,6 @@ locals {
     }
   ]
 
-  migration_command = join("\n", [
-    "set -e",
-    "mkdir -p /opt/corridor/data /opt/corridor/uploads /opt/corridor/databases",
-    "cd /opt/corridor",
-    "source venv/bin/activate",
-    "echo \"Starting database upgrade...\"",
-    "/opt/corridor/venv/bin/corridor-api db upgrade",
-    "mv /opt/corridor/corridor*.db* /opt/corridor/databases/ || true",
-  ])
-
   app_command = join("\n", [
     "set -e",
     "mkdir -p /opt/corridor/data /opt/corridor/uploads /opt/corridor/databases",
@@ -101,7 +83,6 @@ locals {
     "mkdir -p /opt/corridor/data /opt/corridor/uploads /opt/corridor/databases",
     "cd /opt/corridor",
     "source venv/bin/activate",
-    "sleep 10",
     "echo \"Starting corridor-worker...\"",
     "exec venv/bin/corridor-worker run",
   ])
@@ -136,10 +117,23 @@ locals {
       sourceVolume  = "databases-volume"
       containerPath = "/opt/corridor/databases"
       readOnly      = false
+    },
+    {
+      sourceVolume  = "kernels-volume"
+      containerPath = "/opt/corridor/kernels"
+      readOnly      = false
     }
   ]
 
   worker_mount_points = local.app_mount_points
+
+  # Containers in this task share localhost; the SDK appends /api.
+  worker_environment = concat(local.common_environment, [
+    {
+      name  = "CORRIDOR_API_URL"
+      value = "http://localhost:5002/"
+    }
+  ])
 
   jupyter_mount_points = [
     {
@@ -166,52 +160,6 @@ locals {
 
   container_definitions = jsonencode([
     {
-      name        = "corridor-migration"
-      image       = var.image
-      essential   = false
-      cpu         = 256
-      memory      = 1024
-      command     = ["/bin/bash", "-ec", local.migration_command]
-      environment = local.common_environment
-      mountPoints = local.app_mount_points
-      logConfiguration = {
-        logDriver = "awslogs"
-        options   = merge(local.log_options, { awslogs-stream-prefix = "migration" })
-      }
-    },
-    {
-      name      = "redis"
-      image     = "public.ecr.aws/docker/library/redis:7.2-alpine"
-      essential = true
-      cpu       = 128
-      memory    = 256
-      command   = ["redis-server", "--databases", "32"]
-      portMappings = [
-        {
-          containerPort = 6379
-          hostPort      = 6379
-          protocol      = "tcp"
-        }
-      ]
-      dependsOn = [
-        {
-          containerName = "corridor-migration"
-          condition     = "SUCCESS"
-        }
-      ]
-      healthCheck = {
-        command     = ["CMD-SHELL", "redis-cli ping || exit 1"]
-        interval    = 10
-        timeout     = 5
-        retries     = 3
-        startPeriod = 30
-      }
-      logConfiguration = {
-        logDriver = "awslogs"
-        options   = merge(local.log_options, { awslogs-stream-prefix = "redis" })
-      }
-    },
-    {
       name        = "corridor-app"
       image       = var.image
       essential   = true
@@ -229,11 +177,7 @@ locals {
       ]
       dependsOn = [
         {
-          containerName = "corridor-migration"
-          condition     = "SUCCESS"
-        },
-        {
-          containerName = "redis"
+          containerName = "corridor-worker"
           condition     = "HEALTHY"
         }
       ]
@@ -252,22 +196,19 @@ locals {
     {
       name        = "corridor-worker"
       image       = var.image
-      essential   = false
+      essential   = true
       cpu         = 512
       memory      = 4096
       command     = ["/bin/bash", "-ec", local.worker_command]
-      environment = local.common_environment
+      environment = local.worker_environment
       mountPoints = local.worker_mount_points
-      dependsOn = [
-        {
-          containerName = "corridor-migration"
-          condition     = "SUCCESS"
-        },
-        {
-          containerName = "redis"
-          condition     = "HEALTHY"
-        }
-      ]
+      healthCheck = {
+        command     = ["CMD-SHELL", "/opt/corridor/venv/bin/python -c \"import socket; socket.create_connection(('127.0.0.1', 5001), timeout=5).close()\""]
+        interval    = 10
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options   = merge(local.log_options, { awslogs-stream-prefix = "worker" })
@@ -287,16 +228,6 @@ locals {
           containerPort = 5003
           hostPort      = 5003
           protocol      = "tcp"
-        }
-      ]
-      dependsOn = [
-        {
-          containerName = "corridor-migration"
-          condition     = "SUCCESS"
-        },
-        {
-          containerName = "redis"
-          condition     = "HEALTHY"
         }
       ]
       healthCheck = {
@@ -570,6 +501,20 @@ resource "aws_ecs_task_definition" "this" {
   }
 
   volume {
+    name = "kernels-volume"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.this.id
+      transit_encryption = "ENABLED"
+
+      authorization_config {
+        access_point_id = aws_efs_access_point.kernels.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
+  volume {
     name = "jupyter-volume"
 
     efs_volume_configuration {
@@ -635,8 +580,9 @@ resource "aws_ecs_service" "this" {
     container_port   = 5003
   }
 
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
+  # Kernel leases belong to one worker; stop the old task before starting its replacement.
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
 
   depends_on = [
     aws_lb_listener.https,
