@@ -66,7 +66,7 @@ variable "database_port" {
 
 variable "database_engine_version" {
   type    = string
-  default = "15.4"
+  default = "17.7"
 }
 
 variable "database_master_username" {

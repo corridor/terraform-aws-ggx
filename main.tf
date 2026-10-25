@@ -587,6 +587,7 @@ resource "aws_ecs_service" "this" {
   depends_on = [
     aws_lb_listener.https,
     aws_lb_listener_rule.jupyter,
+    aws_rds_cluster_instance.this,
   ]
 
   tags = local.tags
