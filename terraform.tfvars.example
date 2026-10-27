@@ -1,3 +1,11 @@
+cluster_name = "genguardx-cluster"
+vpc_id       = "replace-me"
+
+# Replace with public subnet IDs in your VPC, in two different Availability Zones.
+public_subnet_ids = [
+  "subnet-replace-me-a", "subnet-replace-me-b"
+]
+
 image           = "204697011894.dkr.ecr.us-west-2.amazonaws.com/corridor/ggx-sandbox:latest"
 hostname        = "genguardx.example.com"
 certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/replace-me"
