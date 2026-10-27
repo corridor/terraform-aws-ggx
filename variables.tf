@@ -9,7 +9,8 @@ variable "name" {
 }
 
 variable "cluster_name" {
-  type = string
+  description = "Name of the ECS cluster to reuse if it exists, or create otherwise."
+  type        = string
 }
 
 variable "vpc_id" {

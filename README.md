@@ -2,7 +2,7 @@
 
 Terraform for running GenGuardX on AWS with ECS Fargate.
 
-- one ECS service on an existing cluster
+- one ECS service on an existing cluster, or a new cluster if the name is not found
 - a single Fargate task definition with:
   - `corridor-app` (unified API and UI)
   - `corridor-worker` (Jupyter kernel worker on port `5001`)
@@ -14,7 +14,7 @@ Terraform for running GenGuardX on AWS with ECS Fargate.
 
 ## What It Provisions
 
-- ECS task definition and service on an existing ECS cluster
+- ECS task definition and service, creating the ECS cluster if needed
 - Application Load Balancer, listeners, and target groups
 - EFS file system, mount targets, and access points
 - optional Aurora PostgreSQL Serverless v2 cluster and subnet/security group wiring
@@ -26,11 +26,16 @@ Terraform for running GenGuardX on AWS with ECS Fargate.
 
 Update `terraform.tfvars` from `terraform.tfvars.example`:
 
+- `cluster_name` (name of the ECS cluster to reuse or create)
 - `image`
 - `hostname`
 - `certificate_arn`
 - `database_url` or enable `create_database`
 - `license_key`
+
+The module looks for `cluster_name` in the configured AWS account and region. If it exists, the service uses it without managing or deleting that cluster. Otherwise, `terraform plan` previews a new cluster and `terraform apply` creates it. For example, set `cluster_name = "serverless_demo_terraform"`. The VPC and subnets must already exist. The Terraform identity needs `ecs:ListClusters` for discovery.
+
+The initial cluster selection is saved in Terraform state so subsequent plans keep managing a cluster created by this module. Changing `cluster_name` selects again. Keep the state file: deleting it loses that ownership decision. If an externally managed cluster is later deleted, restore it or replace `terraform_data.cluster_selection` to select again.
 
 To let this module create its own database, set `create_database = true` and provide at least:
 

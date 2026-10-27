@@ -1,5 +1,5 @@
 output "cluster_arn" {
-  value = data.aws_ecs_cluster.existing.arn
+  value = local.cluster_arn
 }
 
 output "service_name" {

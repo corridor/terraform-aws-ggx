@@ -554,9 +554,35 @@ resource "aws_ecs_task_definition" "this" {
   tags = local.tags
 }
 
+resource "aws_ecs_cluster" "this" {
+  count = terraform_data.cluster_selection.input.existing_arn == null ? 1 : 0
+
+  name = var.cluster_name
+  tags = local.tags
+}
+
+# Keep the initial ownership decision after a newly created cluster appears in AWS.
+resource "terraform_data" "cluster_selection" {
+  input = {
+    existing_arn = one([
+      for arn in data.aws_ecs_clusters.available.cluster_arns : arn
+      if endswith(arn, ":cluster/${var.cluster_name}")
+    ])
+  }
+  triggers_replace = var.cluster_name
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
+locals {
+  cluster_arn = terraform_data.cluster_selection.input.existing_arn != null ? terraform_data.cluster_selection.input.existing_arn : aws_ecs_cluster.this[0].arn
+}
+
 resource "aws_ecs_service" "this" {
   name                   = "${var.name}-app-service"
-  cluster                = data.aws_ecs_cluster.existing.arn
+  cluster                = local.cluster_arn
   task_definition        = aws_ecs_task_definition.this.arn
   desired_count          = var.desired_count
   launch_type            = "FARGATE"
